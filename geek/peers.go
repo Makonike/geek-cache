@@ -30,6 +30,7 @@ type ClientPicker struct {
 	mu          sync.RWMutex        // guards
 	consHash    *consistenthash.Map // stores the list of peers, selected by specific key
 	clients     map[string]*Client  // keyed by e.g. "10.0.0.2:8009"
+	stopSignal  chan error          // signal to stop
 }
 
 func NewClientPicker(self string, opts ...PickerOptions) *ClientPicker {
@@ -40,11 +41,10 @@ func NewClientPicker(self string, opts ...PickerOptions) *ClientPicker {
 		mu:          sync.RWMutex{},
 		consHash:    consistenthash.New(),
 	}
-	picker.mu.Lock()
 	for _, opt := range opts {
 		opt(&picker)
 	}
-	picker.mu.Unlock()
+
 	// 增量更新
 	// TODO: watch closed
 	picker.set(picker.self)
@@ -84,6 +84,7 @@ func NewClientPicker(self string, opts ...PickerOptions) *ClientPicker {
 			}()
 		}
 	}()
+
 	// 全量更新
 	go func() {
 		picker.mu.Lock()
@@ -113,6 +114,20 @@ func NewClientPicker(self string, opts ...PickerOptions) *ClientPicker {
 
 		}
 	}()
+
+	// register itself
+	go func() {
+		err := registry.Register(picker.serviceName, picker.self, picker.stopSignal)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+		close(picker.stopSignal)
+		if err != nil {
+			log.Fatalf(err.Error())
+		}
+		log.Printf("[%s] Revoke service and close tcp socket ok", picker.self)
+	}()
+
 	return &picker
 }
 

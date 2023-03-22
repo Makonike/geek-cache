@@ -3,15 +3,13 @@ package geek
 import (
 	"context"
 	"fmt"
-	"github.com/Makonike/geek-cache/geek/utils"
 	"log"
 	"net"
 	"strings"
 	"sync"
 
 	pb "github.com/Makonike/geek-cache/geek/pb"
-	registy "github.com/Makonike/geek-cache/geek/registry"
-
+	"github.com/Makonike/geek-cache/geek/utils"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -23,11 +21,9 @@ const (
 
 type Server struct {
 	pb.UnimplementedGroupCacheServer
-	self       string     // self ip
-	sname      string     // name of service
-	status     bool       // true if the server is running
-	mu         sync.Mutex // guards
-	stopSignal chan error // signal to stop
+	self   string     // self ip
+	status bool       // true if the server is running
+	mu     sync.Mutex // guards
 }
 
 type ServerOptions func(*Server)
@@ -39,24 +35,12 @@ func NewServer(self string, opts ...ServerOptions) (*Server, error) {
 		return nil, fmt.Errorf("invalid address: %v", self)
 	}
 	s := Server{
-		self:  self,
-		sname: defaultServiceName,
+		self: self,
 	}
 	for _, opt := range opts {
 		opt(&s)
 	}
 	return &s, nil
-}
-
-func ServiceName(sname string) ServerOptions {
-	return func(s *Server) {
-		s.sname = sname
-	}
-}
-
-// Log info
-func (s *Server) Log(format string, path ...interface{}) {
-	log.Printf("[Server %s] %s", s.self, fmt.Sprintf(format, path...))
 }
 
 func (s *Server) Get(ctx context.Context, in *pb.Request) (*pb.ResponseForGet, error) {
@@ -106,7 +90,6 @@ func (s *Server) Start() error {
 		return fmt.Errorf("server already running")
 	}
 	s.status = true
-	s.stopSignal = make(chan error)
 
 	port := strings.Split(s.self, ":")[1]
 	l, err := net.Listen("tcp", ":"+port)
@@ -117,33 +100,10 @@ func (s *Server) Start() error {
 	pb.RegisterGroupCacheServer(grpcServer, s)
 	// 启动 reflection 反射服务
 	reflection.Register(grpcServer)
-	go func() {
-		err := registy.Register(s.sname, s.self, s.stopSignal)
-		if err != nil {
-			log.Fatalf(err.Error())
-		}
-		close(s.stopSignal)
-		err = l.Close()
-		if err != nil {
-			log.Fatalf(err.Error())
-		}
-		log.Printf("[%s] Revoke service and close tcp socket ok", s.self)
-	}()
 
 	s.mu.Unlock()
 	if err := grpcServer.Serve(l); s.status && err != nil {
 		return fmt.Errorf("failed to serve on %s: %v", port, err)
 	}
 	return nil
-}
-
-func (s *Server) Stop() {
-	s.mu.Lock()
-	if !s.status {
-		s.mu.Unlock()
-		return
-	}
-	s.stopSignal <- nil
-	s.status = false
-	s.mu.Unlock()
 }
