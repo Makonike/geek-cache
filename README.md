@@ -16,14 +16,6 @@ Be sure to install **etcd v3**(port 2379), grpcurl(for your tests), protobuf v3.
 
 In your application, you can configure like following:
 
-- Server
-
-```go
-func NewServer(self string, opts ...ServerOptions) (*Server, error)
-
-server, err := geek.NewServer(addr, geek.ServiceName("your-service-name"))
-```
-
 - Client
 
 ```go
@@ -119,6 +111,8 @@ go build -o server
 ./server -port=8001 &
 ./server -port=8002 &
 ./server -port=8003 &
+
+sleep 3
 
 echo ">>> start test"
 grpcurl -plaintext -d '{"group":"scores", "key": "Tom"}' 127.0.0.1:8001 pb.GroupCache/Get 
