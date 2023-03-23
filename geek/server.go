@@ -26,21 +26,15 @@ type Server struct {
 	mu     sync.Mutex // guards
 }
 
-type ServerOptions func(*Server)
-
-func NewServer(self string, opts ...ServerOptions) (*Server, error) {
+func NewServer(self string) (*Server, error) {
 	if self == "" {
 		self = defaultAddr
 	} else if !utils.ValidPeerAddr(self) {
 		return nil, fmt.Errorf("invalid address: %v", self)
 	}
-	s := Server{
+	return &Server{
 		self: self,
-	}
-	for _, opt := range opts {
-		opt(&s)
-	}
-	return &s, nil
+	}, nil
 }
 
 func (s *Server) Get(ctx context.Context, in *pb.Request) (*pb.ResponseForGet, error) {
@@ -84,6 +78,7 @@ func (s *Server) Delete(ctx context.Context, in *pb.Request) (*pb.ResponseForDel
 }
 
 func (s *Server) Start() error {
+	// 不通过单例去保证全局唯一，而是通过加锁和状态来使得server只有一个有效。
 	s.mu.Lock()
 	if s.status {
 		s.mu.Unlock()
